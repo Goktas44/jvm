@@ -11,6 +11,7 @@ const extract = require("extract-zip");
 const { execSync } = require("child_process");
 const { dir } = require("console");
 const { version: cliVersion } = require("./package.json");
+const inquirer    = require('inquirer');
 const cliProgress = require("cli-progress");
 
 const program = new Command();
@@ -73,7 +74,7 @@ program
         line += `  (path: ${path.join(VERSIONS, name)})`;
       }
       if (isCurrent) {
-        line += "  (kullanılan)";
+        line += "  (Currently using 64-bit executable)";
       }
       console.log(line);
     });
@@ -153,97 +154,124 @@ program
 
 // -------------------- INSTALL / I --------------------
 program
-  .command("install <version>")
-  .alias("i")
-  .description(
-    "Download and install Oracle JDK <version> into ~/.jvm/versions/<version>"
-  )
-  .action(async (version) => {
+  .command('install [version] [vendor]')
+  .alias('i')
+  .description('Install JDK; default version=17, prompts for vendor if not provided')
+  .action(async (version = '17', vendor) => {
     try {
-      await fs.ensureDir(VERSIONS);
-      const targetDir = path.join(VERSIONS, "jdk-" + version);
+      // Normalize version (strip leading "jdk-" if present)
+      version = version.replace(/^jdk-/, '');
 
+      // Available JDK distributions
+      const vendors = [
+        { name: 'Oracle',   value: 'oracle'   },
+        { name: 'Temurin',  value: 'temurin'  },
+        { name: 'Corretto', value: 'corretto' },
+        { name: 'Liberica', value: 'liberica' }
+      ];
+
+      // If vendor not provided or invalid, prompt the user
+      if (!vendor || !vendors.some(v => v.value === vendor.toLowerCase())) {
+        const answer = await inquirer.prompt([{
+          type: 'list',
+          name: 'vendor',
+          message: 'Which JDK distribution would you like to install? (Press Ctrl + C to exit.)',
+          choices: vendors
+        }]);
+        vendor = answer.vendor;
+      }
+
+      console.log(`> Installing jdk-${version} from ${vendor}`);
+
+      // Prepare downloadInfo based on chosen vendor
+      let downloadInfo;
+      if (vendor === 'oracle') {
+        const arch = process.platform === 'win32'
+          ? 'windows-x64'
+          : process.platform === 'darwin'
+            ? 'macos-x64'
+            : 'linux-x64';
+        const ext = process.platform === 'win32' ? 'zip' : 'tar.gz';
+        const latestUrl  = `https://download.oracle.com/java/${version}/latest/jdk-${version}_${arch}_bin.${ext}`;
+        const archiveUrl = `https://download.oracle.com/java/${version}/archive/jdk-${version}_${arch}_bin.${ext}`;
+        let url = latestUrl;
+        try {
+          // Check if "latest" exists; if not, fall back to "archive"
+          await axios.head(latestUrl, { headers: { 'Cookie': 'oraclelicense=accept-securebackup-cookie' } });
+        } catch {
+          url = archiveUrl;
+        }
+        downloadInfo = { url, type: ext === 'zip' ? 'zip' : 'tgz', cookie: true };
+
+      } else if (vendor === 'temurin') {
+        const major = semver.major(version);
+        const apiUrl = `https://api.github.com/repos/adoptium/temurin${major}-binaries/releases/tags/jdk-${version}`;
+        const { data } = await axios.get(apiUrl, { headers: { Accept: 'application/vnd.github.v3+json' } });
+        const asset = data.assets.find(a => {
+          const n = a.name.toLowerCase();
+          if (process.platform === 'win32')   return n.endsWith('.zip')   && n.includes('windows');
+          if (process.platform === 'darwin')  return n.endsWith('.tar.gz') && n.includes('mac');
+          return n.endsWith('.tar.gz')        && n.includes('linux');
+        });
+        if (!asset) throw new Error('No suitable Temurin asset found');
+        downloadInfo = { url: asset.browser_download_url, type: asset.name.endsWith('.zip') ? 'zip' : 'tgz' };
+
+      } else {
+        throw new Error(`Unsupported vendor: ${vendor}`);
+      }
+
+      // Download and extract
+      await fs.ensureDir(VERSIONS);
+      const targetDir = path.join(VERSIONS, `jdk-${version}`);
       if (await fs.pathExists(targetDir)) {
-        console.log(`${version} is already installed.`);
+        console.log(`jdk-${version} is already installed, skipping.`);
         return;
       }
 
+      console.log(`Downloading from: ${downloadInfo.url}`);
+      const tmpFile = path.join(os.tmpdir(), path.basename(downloadInfo.url));
+      const opts = { responseType: 'stream' };
+      if (downloadInfo.cookie) opts.headers = { 'Cookie': 'oraclelicense=accept-securebackup-cookie' };
+      const res = await axios.get(downloadInfo.url, opts);
+      await new Promise((resolve, reject) => {
+        const writer = fs.createWriteStream(tmpFile);
+        res.data.pipe(writer);
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+
+      const tmpExtract = path.join(os.tmpdir(), `jvm-extract-${version}-${Date.now()}`);
+      await fs.ensureDir(tmpExtract);
+      if (downloadInfo.type === 'zip') {
+        await extract(tmpFile, { dir: tmpExtract });
+      } else {
+        await tar.x({ file: tmpFile, cwd: tmpExtract });
+      }
+
+      // Move inner directory contents into targetDir
+      let inner = tmpExtract;
+      const items = await fs.readdir(tmpExtract);
+      if (items.length === 1) {
+        const candidate = path.join(tmpExtract, items[0]);
+        if ((await fs.stat(candidate)).isDirectory()) inner = candidate;
+      }
       await fs.ensureDir(targetDir);
-      console.log(`Created directory for ${version}: ${targetDir}`);
-
-      const arch =
-        process.platform === "win32"
-          ? "windows-x64"
-          : process.platform === "darwin"
-          ? "macos-x64"
-          : "linux-x64";
-      const ext = process.platform === "win32" ? "zip" : "tar.gz";
-
-      const latestUrl = `https://download.oracle.com/java/${version}/latest/jdk-${version}_${arch}_bin.${ext}`;
-      const archiveUrl = `https://download.oracle.com/java/${version}/archive/jdk-${version}_${arch}_bin.${ext}`;
-      let downloadUrl = latestUrl;
-
-      try {
-        await axios.head(latestUrl, {
-          headers: { Cookie: "oraclelicense=accept-securebackup-cookie" },
-        });
-      } catch {
-        downloadUrl = archiveUrl;
-        console.log(
-          `⚠️  latest not found; using 'archive' instead.:\n  ${archiveUrl}`
+      await fs.emptyDir(targetDir);
+      for (const name of await fs.readdir(inner)) {
+        await fs.move(
+          path.join(inner, name),
+          path.join(targetDir, name),
+          { overwrite: true }
         );
       }
 
-      console.log(`Downloading Oracle JDK ${version} from:\n  ${downloadUrl}`);
-
-      const tmpFile = path.join(os.tmpdir(), path.basename(downloadUrl));
-
-      const response = await axios.get(downloadUrl, {
-        responseType: "stream",
-        headers: { Cookie: "oraclelicense=accept-securebackup-cookie" },
-      });
-
-      await new Promise((resolve, reject) => {
-        const writer = fs.createWriteStream(tmpFile);
-        response.data.pipe(writer);
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
-
-      const tmpExtractDir = path.join(
-        os.tmpdir(),
-        `jvm-extract-${version}-${Date.now()}`
-      );
-      await fs.ensureDir(tmpExtractDir);
-
-      if (tmpFile.endsWith(".zip")) {
-        await extract(tmpFile, { dir: tmpExtractDir });
-      } else {
-        await tar.x({ file: tmpFile, cwd: tmpExtractDir });
-      }
-
-      const entries = await fs.readdir(tmpExtractDir);
-      if (entries.length === 1) {
-        const inner = path.join(tmpExtractDir, entries[0]);
-        if ((await fs.stat(inner)).isDirectory()) {
-          await fs.ensureDir(targetDir);
-          const items = await fs.readdir(inner);
-          for (const name of items) {
-            await fs.move(path.join(inner, name), path.join(targetDir, name), {
-              overwrite: true,
-            });
-          }
-        } else {
-          await fs.copy(tmpExtractDir, targetDir);
-        }
-      } else {
-        await fs.copy(tmpExtractDir, targetDir);
-      }
-
-      await fs.remove(tmpExtractDir);
+      // Cleanup
+      await fs.remove(tmpExtract);
       await fs.remove(tmpFile);
+
+      console.log(`✔️  jdk-${version} successfully installed at: ${targetDir}`);
     } catch (err) {
-      console.error("Error in install command:", err.message);
+      console.error('Error during install:', err.message);
       process.exit(1);
     }
   });

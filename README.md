@@ -2,6 +2,8 @@
 
 **Simple Java Version Manager CLI**
 
+**Repository:** [https://github.com/Goktas44](https://github.com/Goktas44/jvm)
+
 ---
 
 ## 📦 Installation
@@ -12,7 +14,7 @@ Install globally via npm:
 npm install -g sjvm
 ```
 
-> **Note**: On Windows, the installer will automatically append `%JAVA_HOME%\bin` to your user PATH.
+> **Note**: On Windows, the installer will automatically append `%JAVA_HOME%\\bin` to your user PATH.
 > On macOS/Linux, add the following line to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) if you haven’t already:
 
 ```bash
@@ -51,19 +53,40 @@ jvm ls
 
 **Options:**
 
-* `-v, --verbose`
-  Show full installation paths.
+* `-v, --verbose`  Show full installation paths.
 
 ---
 
 ### install / i
 
-Download and install Oracle JDK `<version>` into `~/.jvm/versions/<version>`.
+Download and install the specified JDK version into `~/.jvm/versions/jdk-<version>`.
+
+* **Default version:** `17` if none is specified.
+* **Default vendor:** `oracle` if none is specified.
+* **Interactive vendor selection:** If you run `jvm install` without providing a vendor (or provide an unrecognized vendor), you will be prompted to choose from:
+
+  1. Oracle
+  2. Temurin (Adoptium)
+  3. Corretto (Amazon)
+  4. Liberica (BellSoft)
+
+**Example interactive session:**
 
 ```bash
-jvm install 17
-# or
-jvm i 17.0.2
+$ jvm install
+Which JDK distribution would you like to install?
+  Oracle
+  Temurin
+> Corretto
+  Liberica
+```
+
+```bash
+# Install JDK 17 from Oracle (default)
+jvm install
+
+# Install JDK 11 from Temurin explicitly
+jvm install 11 temurin
 ```
 
 ---
@@ -77,7 +100,7 @@ Switch your active JDK to `<version>`.
 ```bash
 jvm use 17
 # or
-jvm u 11.0.16
+eval "$(jvm use 11.0.16)"
 ```
 
 ---
@@ -100,8 +123,14 @@ jvm rm jdk-11.0.16
 # List installed versions
 jvm ls
 
-# Install JDK 21
+# Install default JDK (17/Oracle)
+jvm install
+
+# Install JDK 21 (Oracle by default)
 jvm install 21
+
+# Install JDK 11 from Temurin
+jvm install 11 temurin
 
 # Switch to JDK 21
 eval "$(jvm use 21)"
@@ -132,7 +161,7 @@ source ~/.bashrc   # or source ~/.zshrc
 ## 🤝 Contributing
 
 Contributions, issues and feature requests are welcome!
-Feel free to check [issues](https://github.com/your-repo/jvm/issues) or open a pull request.
+Feel free to check [issues](https://github.com/Goktas44/jvm/issues) or open a pull request.
 
 ---
 
