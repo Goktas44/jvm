@@ -1,0 +1,38 @@
+{
+  "name": "sjvm",
+  "version": "0.1.4",
+  "type": "commonjs",
+  "main": "jvm.js",
+  "bin": {
+    "jvm": "jvm.js"
+  },
+  "files": [
+    "jvm.js",
+    "lib/",
+    "scripts/"
+  ],
+  "scripts": {
+    "postinstall": "node ./scripts/add-java-bin-to-path.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Goktas44/jvm.git"
+  },
+  "author": "Abdurrahman Göktaş",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "cli-progress": "^3.12.0",
+    "commander": "^14.0.0",
+    "extract-zip": "^2.0.1",
+    "fs-extra": "^11.3.0",
+    "ora": "^8.2.0",
+    "semver": "^7.7.2",
+    "tar": "^7.4.3",
+    "windows-elevate": "^1.0.1"
+  },
+  "devDependencies": {},
+  "description": ""
+}
