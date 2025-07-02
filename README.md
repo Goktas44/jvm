@@ -73,7 +73,7 @@ Download and install the specified JDK version into `~/.jvm/versions/jdk-<versio
 **Example interactive session:**
 
 ```bash
-$ jvm install
+$ jvm install <version>
 Which JDK distribution would you like to install?
   Oracle
   Temurin
