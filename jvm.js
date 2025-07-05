@@ -222,9 +222,9 @@ program
 
       // Download and extract
       await fs.ensureDir(VERSIONS);
-      const targetDir = path.join(VERSIONS, `jdk-${version}`);
+      const targetDir = path.join(VERSIONS, `jdk-${version} (${vendor})`);
       if (await fs.pathExists(targetDir)) {
-        console.log(`jdk-${version} is already installed, skipping.`);
+        console.log(`jdk-${version}-${vendor} is already installed, skipping.`);
         return;
       }
 
@@ -269,7 +269,7 @@ program
       await fs.remove(tmpExtract);
       await fs.remove(tmpFile);
 
-      console.log(`✔️  jdk-${version} successfully installed at: ${targetDir}`);
+      console.log(`✔️  jdk-${version}-${vendor} successfully installed at: ${targetDir}`);
     } catch (err) {
       console.error('Error during install:', err.message);
       process.exit(1);
